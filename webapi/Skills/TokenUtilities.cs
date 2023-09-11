@@ -79,8 +79,13 @@ public static class TokenUtilities
             return;
         }
 
-        var tokenUsage = result.ModelResults.First().GetResult<ChatModelResult>().Usage.TotalTokens;
-        chatContext.Variables.Set(functionKey!, tokenUsage.ToString(CultureInfo.InvariantCulture));
+        var resultObj = result.ModelResults.First().GetRawResult();
+
+        if (resultObj is ChatModelResult chatResult)
+        {
+            var tokenUsage = chatResult.Usage.TotalTokens;
+            chatContext.Variables.Set(functionKey!, tokenUsage.ToString(CultureInfo.InvariantCulture));
+        }
     }
 
     /// <summary>

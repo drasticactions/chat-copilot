@@ -9,13 +9,20 @@ using CopilotChat.WebApi.Options;
 using CopilotChat.WebApi.Services;
 using CopilotChat.WebApi.Skills.ChatSkills;
 using CopilotChat.WebApi.Storage;
+using LLama;
+using LLama.Common;
+using LLamaSharp.SemanticKernel.ChatCompletion;
+using LLamaSharp.SemanticKernel.TextCompletion;
+using LLamaSharp.SemanticKernel.TextEmbedding;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.AI.ChatCompletion;
 using Microsoft.SemanticKernel.AI.Embeddings;
+using Microsoft.SemanticKernel.AI.TextCompletion;
 using Microsoft.SemanticKernel.Connectors.AI.OpenAI.TextEmbedding;
 using Microsoft.SemanticKernel.Connectors.Memory.AzureCognitiveSearch;
 using Microsoft.SemanticKernel.Connectors.Memory.Chroma;
@@ -282,6 +289,8 @@ internal static class SemanticKernelExtensions
     {
         return options.Type switch
         {
+            AIServiceOptions.AIServiceType.Local
+                => kernelBuilder.WithLocalBackend(options),
             AIServiceOptions.AIServiceType.AzureOpenAI
                 => kernelBuilder.WithAzureChatCompletionService(options.Models.Completion, options.Endpoint, options.Key),
             AIServiceOptions.AIServiceType.OpenAI
@@ -291,6 +300,22 @@ internal static class SemanticKernelExtensions
         };
     }
 
+    private static KernelBuilder WithLocalBackend(this KernelBuilder kernelBuilder, AIServiceOptions options)
+    {
+        var parameters = new ModelParams(options.ModelPath)
+        {
+            Seed = 1337,
+            GpuLayerCount = 50,
+        };
+
+        var model = LLamaWeights.LoadFromFile(parameters);
+        var context = model.CreateContext(parameters);
+        var ex = new InteractiveExecutor(context);
+        var chat = new LLamaSharpChatCompletion(ex);
+        var text = new LLamaSharpTextCompletion(ex);
+        return kernelBuilder.WithAIService<IChatCompletion>("local-llama", chat).WithAIService<ITextCompletion>("l", text);
+    }
+
     /// <summary>
     /// Add the embedding backend to the kernel config
     /// </summary>
@@ -298,6 +323,8 @@ internal static class SemanticKernelExtensions
     {
         return options.Type switch
         {
+            AIServiceOptions.AIServiceType.Local
+                => kernelBuilder.WithLocalEmbedder(options),
             AIServiceOptions.AIServiceType.AzureOpenAI
                 => kernelBuilder.WithAzureTextEmbeddingGenerationService(options.Models.Embedding, options.Endpoint, options.Key),
             AIServiceOptions.AIServiceType.OpenAI
@@ -307,6 +334,9 @@ internal static class SemanticKernelExtensions
         };
     }
 
+    private static KernelBuilder WithLocalEmbedder(this KernelBuilder kernelBuilder, AIServiceOptions options)
+        => kernelBuilder.WithAIService<ITextEmbeddingGeneration>("local-llama-embed", GenerateLocalTextEmbedding(options));
+
     /// <summary>
     /// Add the completion backend to the kernel config for the planner.
     /// </summary>
@@ -314,6 +344,8 @@ internal static class SemanticKernelExtensions
     {
         return options.Type switch
         {
+            AIServiceOptions.AIServiceType.Local
+                => kernelBuilder.WithLocalBackend(options),
             AIServiceOptions.AIServiceType.AzureOpenAI => kernelBuilder.WithAzureChatCompletionService(options.Models.Planner, options.Endpoint, options.Key),
             AIServiceOptions.AIServiceType.OpenAI => kernelBuilder.WithOpenAIChatCompletionService(options.Models.Planner, options.Key),
             _ => throw new ArgumentException($"Invalid {nameof(options.Type)} value in '{AIServiceOptions.PropertyName}' settings."),
@@ -332,6 +364,8 @@ internal static class SemanticKernelExtensions
     {
         return options.Type switch
         {
+            AIServiceOptions.AIServiceType.Local
+                => GenerateLocalTextEmbedding(options),
             AIServiceOptions.AIServiceType.AzureOpenAI
                 => new AzureTextEmbeddingGeneration(options.Models.Embedding, options.Endpoint, options.Key, httpClient: httpClient, loggerFactory: loggerFactory),
             AIServiceOptions.AIServiceType.OpenAI
@@ -339,5 +373,18 @@ internal static class SemanticKernelExtensions
             _
                 => throw new ArgumentException("Invalid AIService value in embeddings backend settings"),
         };
+    }
+
+    private static ITextEmbeddingGeneration GenerateLocalTextEmbedding(AIServiceOptions options)
+    {
+        var parameters = new ModelParams(options.ModelPath)
+        {
+            Seed = 1337,
+            EmbeddingMode = true,
+            GpuLayerCount = 50,
+        };
+
+        var model = LLamaWeights.LoadFromFile(parameters);
+        return new LLamaSharpEmbeddingGeneration(new LLamaEmbedder(model, parameters));
     }
 }

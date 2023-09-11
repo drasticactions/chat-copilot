@@ -3,13 +3,16 @@
 Configure user secrets, appsettings.Development.json, and webapp/.env for Chat Copilot.
 
 .PARAMETER AIService
-The service type used: OpenAI or Azure OpenAI.
+The service type used: OpenAI, Azure OpenAI, or Local.
 
 .PARAMETER APIKey
 The API key for the AI service.
 
 .PARAMETER Endpoint
 Set when using Azure OpenAI.
+
+.PARAMETER ModelPath
+Set when using Local.
 
 .PARAMETER CompletionModel
 The chat completion model to use (e.g., gpt-3.5-turbo or gpt-4).
@@ -44,6 +47,9 @@ param(
 
     [Parameter(Mandatory = $false)]
     [string]$Endpoint,
+
+    [Parameter(Mandatory = $false)]
+    [string]$ModelPath,
     
     [Parameter(Mandatory = $false)]
     [string]$CompletionModel,
@@ -97,8 +103,14 @@ elseif ($AIService -eq $varAzureOpenAI) {
         exit(1)
     }
 }
+elseif ($AIService -eq $varLocal) {
+    if (!$ModelPath) {
+        Write-Error "Please specify a model path for -ModelPath when using Local."
+        exit(1)
+    }
+}
 else {
-    Write-Error "Please specify an AI service (AzureOpenAI or OpenAI) for -AIService."
+    Write-Error "Please specify an AI service (AzureOpenAI, OpenAI, or Local) for -AIService."
     exit(1)
 }
 
@@ -144,7 +156,7 @@ dotnet user-secrets set --project $webapiProjectPath  AIService:Key $ApiKey
 if ($LASTEXITCODE -ne 0) { exit(1) }
 
 $appsettingsOverrides = @{
-    AIService      = @{ Type = $AIService; Endpoint = $Endpoint; Models = @{ Completion = $CompletionModel; Embedding = $EmbeddingModel; Planner = $PlannerModel } };
+    AIService      = @{ Type = $AIService; ModelPath = $ModelPath; Endpoint = $Endpoint; Models = @{ Completion = $CompletionModel; Embedding = $EmbeddingModel; Planner = $PlannerModel } };
     Authentication = @{ Type = $authType; AzureAd = @{ Instance = $Instance; TenantId = $TenantId; ClientId = $BackendClientId; Scopes = $varScopes } }
 }
 $appSettingsJson = -join ("appsettings.", $varASPNetCore, ".json");

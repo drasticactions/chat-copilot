@@ -24,7 +24,12 @@ public sealed class AIServiceOptions
         /// <summary>
         /// OpenAI https://openai.com/
         /// </summary>
-        OpenAI
+        OpenAI,
+
+        /// <summary>
+        /// Local AI service via llama.cpp.
+        /// </summary>
+        Local,
     }
 
     /// <summary>
@@ -74,4 +79,15 @@ public sealed class AIServiceOptions
     /// </summary>
     [Required, NotEmptyOrWhitespace]
     public string Key { get; set; } = string.Empty;
+
+    /// <summary>
+    /// ((Local only) Embedding Modal Path.
+    /// </summary>
+    [RequiredOnPropertyValue(nameof(Type), AIServiceType.Local, notEmptyOrWhitespace: true)]
+    public string ModelPath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// (Local only) Embedding Modal Path.
+    /// </summary>
+    public string EmbeddingModelPath { get; set; } = string.Empty;
 }
